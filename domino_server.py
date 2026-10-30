@@ -249,8 +249,7 @@ async def voice_join(ws,c):
     if old: await voice_leave(ws)
     role='spectator' if is_spec else 'player'
     ident=secrets.token_urlsafe(9)
-    display_name=(username(ws,'Spectateur') if is_spec else username(ws,f'Joueur {n}'))
-    voice_connections[ws]={'id':ident,'room':c,'role':role,'username':display_name}
+    voice_connections[ws]={'id':ident,'room':c,'role':role,'username':username(ws,'Spectateur' if is_spec else f'Joueur {n}')}
     peers=[x for x in voice_room_participants(r) if x['peer_id']!=ident]
     await send(ws,{'type':'voice_peer_list','room':c,'peers':peers})
     for peer in peers:
@@ -264,12 +263,7 @@ async def voice_signal(ws,c,to_id,signal_type,payload):
     if c not in rooms or not info or info.get('room')!=c: return
     # Only relay within this match; no cross-room voice signaling.
     for peer,peer_info in list(voice_connections.items()):
-        if peer is ws or peer_info.get('room')!=c:
-            continue
-        # Verify the recipient is still a player or spectator in this exact room.
-        room=rooms.get(c,{})
-        member=find(room,peer) is not None or peer in room.get('spectators',set())
-        if member and (not to_id or peer_info.get('id')==str(to_id)):
+        if peer is not ws and peer_info.get('room')==c and (not to_id or peer_info.get('id')==str(to_id)):
             await send(peer,{'type':'voice_signal','room':c,'from_id':info['id'],'from_role':info['role'],'from_username':info.get('username','Joueur'),'signal_type':str(signal_type or ''),'payload':payload})
 
 async def voice_leave(ws):
@@ -466,7 +460,7 @@ async def handler(ws):
                     await create(ws,requested_size,duration_seconds)
                 elif t=='join':await join(ws,d.get('room',d.get('room_code',d.get('code'))))
                 elif t in ('watch','spectate'):await watch(ws,d.get('room',d.get('room_code',d.get('code'))))
-                elif t in ('stop_watching','leave_spectator'):await voice_leave(ws);remove_spec(ws);await send(ws,{'type':'watch_stopped'})
+                elif t in ('stop_watching','leave_spectator'):remove_spec(ws);await send(ws,{'type':'watch_stopped'})
                 elif t=='live_matches':await live(ws)
                 elif t=='rooms_list':await rooms_list(ws)
                 elif t=='chat':await chat(ws,d.get('room'),d.get('message',d.get('text')))
